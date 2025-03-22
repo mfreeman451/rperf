@@ -27,7 +27,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use clap::ArgMatches;
 
-use mio::net::{TcpStream};
+use mio::net::TcpStream;
 
 use crate::protocol::communication::{receive, send, KEEPALIVE_DURATION};
 

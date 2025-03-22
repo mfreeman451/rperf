@@ -20,19 +20,26 @@
  
 extern crate log;
 extern crate env_logger;
+extern crate rperf; 
+
 
 use clap::{App, Arg};
+use rperf::{run_client, run_server};
 
+
+/* 
 mod protocol;
 mod stream;
 mod utils;
 mod client;
 mod server;
+*/
+
 
 fn main() {
     let args = App::new("rperf")
         .about(clap::crate_description!())
-        .author("https://github.com/opensource-3d-p/rperf")
+        .author("https://github.com/mfreeman451/rperf")
         .name(clap::crate_name!())
         .version(clap::crate_version!())
         .arg(
@@ -245,35 +252,33 @@ fn main() {
     if args.is_present("server") {
         log::debug!("registering SIGINT handler...");
         ctrlc::set_handler(move || {
-            if server::kill() {
+            if rperf::server::kill() {
                 log::warn!("shutdown requested; please allow a moment for any in-progress tests to stop");
             } else {
                 log::warn!("forcing shutdown immediately");
                 std::process::exit(3);
             }
         }).expect("unable to set SIGINT handler");
-        
+
         log::debug!("beginning normal operation...");
-        let service = server::serve(args);
-        if service.is_err() {
-            log::error!("unable to run server: {}", service.unwrap_err());
+        if let Err(e) = run_server(args) {
+            log::error!("unable to run server: {}", e);
             std::process::exit(4);
         }
-    } else if args.is_present("client") {
+    }  else if args.is_present("client") {
         log::debug!("registering SIGINT handler...");
         ctrlc::set_handler(move || {
-            if client::kill() {
+            if rperf::client::kill() {
                 log::warn!("shutdown requested; please allow a moment for any in-progress tests to stop");
             } else {
                 log::warn!("forcing shutdown immediately");
                 std::process::exit(3);
             }
         }).expect("unable to set SIGINT handler");
-        
+
         log::debug!("connecting to server...");
-        let execution = client::execute(args);
-        if execution.is_err() {
-            log::error!("unable to run client: {}", execution.unwrap_err());
+        if let Err(e) = run_client(args) {
+            log::error!("unable to run client: {}", e);
             std::process::exit(4);
         }
     } else {
