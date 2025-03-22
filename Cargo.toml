@@ -7,7 +7,7 @@ edition = "2021"
 repository = "https://github.com/mfreeman451/rperf"
 license = "GPL-3.0-only"
 keywords = ["network", "performance", "tcp", "udp"]
-categories = ["network-utilities"]
+categories = ["network-programming"]
 readme = "README.md"
 
 # Library definition
