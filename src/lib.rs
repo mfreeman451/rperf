@@ -28,7 +28,7 @@ pub fn run_server(args: ArgMatches) -> BoxResult<()> {
 pub fn run_client_with_output(
     args: Vec<&str>,
     output: Arc<Mutex<Vec<u8>>>,
-) -> Result<()> { // Changed to Result<(), anyhow::Error>
+) -> BoxResult<()> { 
     let matches = App::new("rperf")
         .about(clap::crate_description!())
         .author("https://github.com/mfreeman451/rperf")
