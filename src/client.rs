@@ -163,12 +163,10 @@
                              }
                          },
                          _ => {
-                            let json = result.to_json();
-                            tr.update_from_json(json.clone())?;
+                            tr.update_from_json(result.to_json())?;
                             if display_json {
-                                // Always write JSON to output buffer
-                                let json_str = serde_json::to_string(&json)? + "\n";
-                                output.lock().unwrap().extend_from_slice(json_str.as_bytes());
+                                let output_str = format!("{}\n", result.to_string(display_bit));
+                                output.lock().unwrap().extend_from_slice(output_str.as_bytes());
                             }
                          }
                      }
@@ -434,20 +432,26 @@
      {
          let tr = test_results.lock().unwrap();
          let output_str = if display_json {
-             tr.to_json_string(omit_seconds, upload_config, download_config, common_config, serde_json::json!({
-                 "omit_seconds": omit_seconds,
-                 "ip_version": match server_addr.ip() {
-                     IpAddr::V4(_) => 4,
-                     IpAddr::V6(_) => 6,
-                 },
-                 "reverse": args.is_present("reverse"),
-             }))
+             tr.to_json_string(
+                 omit_seconds,
+                 upload_config,
+                 download_config,
+                 common_config,
+                 serde_json::json!({
+                     "omit_seconds": omit_seconds,
+                     "ip_version": match server_addr.ip() {
+                         IpAddr::V4(_) => 4,
+                         IpAddr::V6(_) => 6,
+                     },
+                     "reverse": args.is_present("reverse"),
+                 })
+             )
          } else {
              format!("{}\n", tr.to_string(display_bit, omit_seconds))
          };
          output.lock().unwrap().extend_from_slice(output_str.as_bytes());
      }
-     
+          
      Ok(())
  }
  
