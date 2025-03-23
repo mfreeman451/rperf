@@ -42,7 +42,7 @@
  
  static ALIVE: AtomicBool = AtomicBool::new(true);
  static mut KILL_TIMER_RELATIVE_START_TIME: f64 = 0.0;
- const KILL_TIMEOUT: f64 = 10.0;
+ const KILL_TIMEOUT: f64 = 5.0;
  const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
  
  fn connect_to_server(address: &str, port: &u16) -> BoxResult<TcpStream> {
@@ -283,30 +283,27 @@
             let handle = thread::spawn(move || {
                 c_cam.lock().unwrap().set_affinity();
                 let mut test = c_ps.lock().unwrap();
-                let start_time = std::time::Instant::now();
-                while start_time.elapsed().as_secs_f32() < duration {
-                    log::debug!("stream {} running interval at {:.2}s", stream_idx_u8, start_time.elapsed().as_secs_f32());
+                loop {
+                    log::debug!("beginning test-interval for stream {}", test.get_idx());
                     match test.run_interval() {
                         Some(Ok(ir)) => {
                             if let Err(e) = c_results_tx.send(ir) {
-                                log::error!("unable to send interval result for stream {}: {}", stream_idx_u8, e);
+                                log::error!("unable to send interval result: {}", e);
                                 break;
                             }
                         },
                         Some(Err(e)) => {
-                            log::error!("stream {} failed: {}", stream_idx_u8, e);
-                            c_results_tx.send(Box::new(crate::protocol::results::ClientFailedResult { stream_idx: stream_idx_u8 })).ok();
-                            return;
+                            log::error!("stream failed: {}", e);
+                            c_results_tx.send(Box::new(crate::protocol::results::ClientFailedResult { stream_idx: test.get_idx() })).ok();
+                            break;
                         },
                         None => {
-                            log::debug!("stream {} completed naturally", stream_idx_u8);
-                            c_results_tx.send(Box::new(crate::protocol::results::ClientDoneResult { stream_idx: stream_idx_u8 })).ok();
-                            return;
+                            log::debug!("stream completed naturally");
+                            c_results_tx.send(Box::new(crate::protocol::results::ClientDoneResult { stream_idx: test.get_idx() })).ok();
+                            break;
                         },
                     }
                 }
-                log::debug!("stream {} reached duration", stream_idx_u8);
-                c_results_tx.send(Box::new(crate::protocol::results::ClientDoneResult { stream_idx: stream_idx_u8 })).ok();
             });
             parallel_streams_joinhandles.push(handle);
         }
@@ -341,6 +338,7 @@
                                             tr.mark_stream_done_server(&(idx64 as u8));
                                             if tr.count_in_progress_streams() == 0 && tr.count_in_progress_streams_server() == 0 {
                                                 complete.store(true, Ordering::Relaxed);
+                                                kill();
                                                 break;
                                             }
                                         },
@@ -367,19 +365,11 @@
                     }
                 },
                 Err(e) => {
-                    log::warn!("Receive error: {}", e);
-                    let tr = test_results.lock().unwrap();
-                    if tr.count_in_progress_streams() == 0 {
-                        complete.store(true, Ordering::Relaxed);
-                        break; // Exit when client is done
+                    if !complete.load(Ordering::Relaxed) {
+                        return Err(anyhow::anyhow!("Receive error: {}", e).into());
                     }
-                    if !is_alive() {
-                        log::warn!("System shutting down, forcing exit...");
-                        break; // Exit immediately on shutdown
-                    }
-                    thread::sleep(Duration::from_millis(500));
-                    continue;
-                },
+                    break;
+               },
             }
         }
         

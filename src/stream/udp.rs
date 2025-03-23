@@ -78,7 +78,7 @@ pub mod receiver {
     use std::net::UdpSocket;
     
     const READ_TIMEOUT:Duration = Duration::from_millis(50);
-    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(15);
+    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(3);
     
     pub struct UdpPortPool {
         pub ports_ip4: Vec<u16>,
@@ -210,6 +210,16 @@ pub mod receiver {
                 }
             }
             log::debug!("bound UDP receive socket for stream {}: {}", stream_idx, socket.local_addr()?);
+
+            /*
+            if *receive_buffer == 0 {
+                log::debug!("setting default receive-buffer to 212992...");
+                super::setsockopt(socket.as_raw_fd(), super::RcvBuf, &212992)?;
+            } else if *receive_buffer != 0 {
+                log::debug!("setting receive-buffer to {}...", receive_buffer);
+                super::setsockopt(socket.as_raw_fd(), super::RcvBuf, receive_buffer)?;
+            }
+            */
             
             Ok(UdpReceiver{
                 active: true,
@@ -353,7 +363,7 @@ pub mod receiver {
                                 if &buf[0..16] == self.test_definition.test_id { //test's over
                                     log::debug!("Received end-of-test signal for UDP stream {}", self.stream_idx);
                                     self.stop();
-                                    break;
+                                    return None;
                                 }
                             }
                             if packet_size < super::TEST_HEADER_SIZE as usize {
@@ -604,7 +614,7 @@ pub mod sender {
                 })))
             } else {
                 //indicate that the test is over by sending the test ID by itself
-                let mut remaining_announcements = 10;
+                let mut remaining_announcements = 5;
                 while remaining_announcements > 0 { //do it a few times in case of loss
                     match self.socket.send(&self.staged_packet[0..16]) {
                         Ok(packet_size) => {
