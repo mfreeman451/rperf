@@ -78,7 +78,7 @@ pub mod receiver {
     use std::net::UdpSocket;
     
     const READ_TIMEOUT:Duration = Duration::from_millis(50);
-    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(10);
+    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(15);
     
     pub struct UdpPortPool {
         pub ports_ip4: Vec<u16>,
@@ -351,6 +351,7 @@ pub mod receiver {
                             log::trace!("received {} bytes in UDP packet {} from {}", packet_size, self.stream_idx, peer_addr);
                             if packet_size == 16 { //possible end-of-test message
                                 if &buf[0..16] == self.test_definition.test_id { //test's over
+                                    log::debug!("Received end-of-test signal for UDP stream {}", self.stream_idx);
                                     self.stop();
                                     break;
                                 }

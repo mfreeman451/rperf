@@ -75,7 +75,7 @@ pub mod receiver {
     use mio::{Events, Ready, Poll, PollOpt, Token};
     
     const POLL_TIMEOUT:Duration = Duration::from_millis(250);
-    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(3);
+    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(15);
     
     pub struct TcpPortPool {
         pub ports_ip4: Vec<u16>,

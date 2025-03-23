@@ -42,7 +42,7 @@
  
  static ALIVE: AtomicBool = AtomicBool::new(true);
  static mut KILL_TIMER_RELATIVE_START_TIME: f64 = 0.0;
- const KILL_TIMEOUT: f64 = 5.0;
+ const KILL_TIMEOUT: f64 = 10.0;
  const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
  
  fn connect_to_server(address: &str, port: &u16) -> BoxResult<TcpStream> {
@@ -385,7 +385,6 @@
         
         // Cleanup immediately after loop
         send(&mut stream, &prepare_end()).unwrap_or_default();
-        thread::sleep(Duration::from_millis(250));
         stream.shutdown(Shutdown::Both).unwrap_or_default();
                 
     }

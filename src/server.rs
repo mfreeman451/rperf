@@ -223,6 +223,11 @@ fn handle_client(
                     },
                     "end" => { //the client has indicated that testing is done; stop cleanly
                         log::info!("[{}] end of testing signaled", &peer_addr);
+                        for ps in parallel_streams.iter_mut() {
+                            let mut stream = ps.lock().unwrap();
+                            stream.stop();
+                        }
+                        send(stream, &serde_json::json!({"kind": "done", "stream_idx": 0})).unwrap_or_default();
                         break;
                     },
                     _ => {
