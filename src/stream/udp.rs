@@ -72,8 +72,8 @@ pub mod receiver {
     use std::os::unix::io::AsRawFd;
     use std::sync::Mutex;
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-    
-    use chrono::NaiveDateTime;
+
+    use chrono::{DateTime, Utc};
     
     use std::net::UdpSocket;
     
@@ -222,7 +222,7 @@ pub mod receiver {
             })
         }
         
-        fn process_packets_ordering(&mut self, packet_id:u64, mut history:&mut UdpReceiverIntervalHistory) -> bool {
+        fn process_packets_ordering(&mut self, packet_id:u64, history:&mut UdpReceiverIntervalHistory) -> bool {
             /* the algorithm from iperf3 provides a pretty decent approximation
              * for tracking lost and out-of-order packets efficiently, so it's
              * been minimally reimplemented here, with corrections.
@@ -249,13 +249,14 @@ pub mod receiver {
             return false;
         }
         
-        fn process_jitter(&mut self, timestamp:&NaiveDateTime, history:&mut UdpReceiverIntervalHistory) {
+        fn process_jitter(&mut self, timestamp: &DateTime<Utc>, history: &mut UdpReceiverIntervalHistory) {
             /* this is a pretty straightforward implementation of RFC 1889, Appendix 8
              * it works on an assumption that the timestamp delta between sender and receiver
              * will remain effectively constant during the testing window
              */
             let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before UNIX epoch");
-            let current_timestamp = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos());
+            let current_timestamp = DateTime::<Utc>::from_timestamp(now.as_secs() as i64, now.subsec_nanos())
+                .expect("invalid current timestamp");
             
             let time_delta = current_timestamp - *timestamp;
             
@@ -266,7 +267,7 @@ pub mod receiver {
                     return;
                 },
             };
-            
+
             if history.unbroken_sequence > 1 { //do jitter calculation
                 let delta_seconds = (time_delta_nanoseconds - history.previous_time_delta_nanoseconds).abs() as f32 / 1_000_000_000.00;
                 
@@ -299,7 +300,8 @@ pub mod receiver {
                 let origin_seconds = i64::from_be_bytes(packet[24..32].try_into().unwrap());
                 //and the following four are the number of nanoseconds since the UNIX epoch
                 let origin_nanoseconds = u32::from_be_bytes(packet[32..36].try_into().unwrap());
-                let source_timestamp = NaiveDateTime::from_timestamp(origin_seconds, origin_nanoseconds);
+                let source_timestamp = DateTime::<Utc>::from_timestamp(origin_seconds, origin_nanoseconds)
+                    .expect("invalid source timestamp");
                 
                 history.unbroken_sequence += 1;
                 self.process_jitter(&source_timestamp, &mut history);
