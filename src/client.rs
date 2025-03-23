@@ -278,13 +278,14 @@
             let c_ps = Arc::clone(parallel_stream);
             let c_results_tx = results_tx.clone();
             let c_cam = cpu_affinity_manager.clone();
-            let duration = upload_config["duration"].as_f64().unwrap() as f32; // Get test duration
-            let stream_idx_u8: u8 = stream_idx.try_into().expect("stream_idx exceeds u8 range"); // Convert usize to u8
+            let duration = upload_config["duration"].as_f64().unwrap() as f32;
+            let stream_idx_u8: u8 = stream_idx.try_into().expect("stream_idx exceeds u8 range");
             let handle = thread::spawn(move || {
                 c_cam.lock().unwrap().set_affinity();
                 let mut test = c_ps.lock().unwrap();
                 let start_time = std::time::Instant::now();
                 while start_time.elapsed().as_secs_f32() < duration {
+                    log::debug!("stream {} running interval at {:.2}s", stream_idx_u8, start_time.elapsed().as_secs_f32());
                     match test.run_interval() {
                         Some(Ok(ir)) => {
                             if let Err(e) = c_results_tx.send(ir) {
@@ -295,22 +296,21 @@
                         Some(Err(e)) => {
                             log::error!("stream {} failed: {}", stream_idx_u8, e);
                             c_results_tx.send(Box::new(crate::protocol::results::ClientFailedResult { stream_idx: stream_idx_u8 })).ok();
-                            return; // Exit thread on error
+                            return;
                         },
                         None => {
                             log::debug!("stream {} completed naturally", stream_idx_u8);
                             c_results_tx.send(Box::new(crate::protocol::results::ClientDoneResult { stream_idx: stream_idx_u8 })).ok();
-                            return; // Exit thread on completion
+                            return;
                         },
                     }
                 }
-                // If duration reached, signal completion
                 log::debug!("stream {} reached duration", stream_idx_u8);
                 c_results_tx.send(Box::new(crate::protocol::results::ClientDoneResult { stream_idx: stream_idx_u8 })).ok();
             });
             parallel_streams_joinhandles.push(handle);
         }
-                
+
         while is_alive() || !complete.load(Ordering::Relaxed) {
             match receive(&mut stream, is_alive, &mut results_handler) {
                 Ok(payload) => {
@@ -341,7 +341,7 @@
                                             tr.mark_stream_done_server(&(idx64 as u8));
                                             if tr.count_in_progress_streams() == 0 && tr.count_in_progress_streams_server() == 0 {
                                                 complete.store(true, Ordering::Relaxed);
-                                                break; // Exit cleanly, no kill()
+                                                break;
                                             }
                                         },
                                         None => {
@@ -351,7 +351,7 @@
                                     },
                                     None => {
                                         log::error!("completion from server did not include stream_idx");
-                                            break;
+                                        break;
                                     },
                                 },
                                 _ => {
@@ -369,24 +369,25 @@
                 Err(e) => {
                     log::warn!("Receive error: {}", e);
                     let tr = test_results.lock().unwrap();
-                    // Exit if all client streams are done, regardless of server response
                     if tr.count_in_progress_streams() == 0 {
                         complete.store(true, Ordering::Relaxed);
-                        break; // Exit when client is done, even if server lags
+                        break; // Exit when client is done
                     }
                     if !is_alive() {
-                        log::warn!("System shutting down, waiting for streams to complete...");
+                        log::warn!("System shutting down, forcing exit...");
+                        break; // Exit immediately on shutdown
                     }
                     thread::sleep(Duration::from_millis(500));
-                    continue; // Wait otherwise
+                    continue;
                 },
             }
         }
         
-        // Only call kill() on explicit program shutdown in main.rs
+        // Cleanup immediately after loop
         send(&mut stream, &prepare_end()).unwrap_or_default();
         thread::sleep(Duration::from_millis(250));
         stream.shutdown(Shutdown::Both).unwrap_or_default();
+                
     }
     
     // Shutdown and cleanup
