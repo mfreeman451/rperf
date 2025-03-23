@@ -78,7 +78,7 @@ pub mod receiver {
     use std::net::UdpSocket;
     
     const READ_TIMEOUT:Duration = Duration::from_millis(50);
-    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(3);
+    const RECEIVE_TIMEOUT:Duration = Duration::from_secs(10);
     
     pub struct UdpPortPool {
         pub ports_ip4: Vec<u16>,
@@ -603,7 +603,7 @@ pub mod sender {
                 })))
             } else {
                 //indicate that the test is over by sending the test ID by itself
-                let mut remaining_announcements = 5;
+                let mut remaining_announcements = 10;
                 while remaining_announcements > 0 { //do it a few times in case of loss
                     match self.socket.send(&self.staged_packet[0..16]) {
                         Ok(packet_size) => {
