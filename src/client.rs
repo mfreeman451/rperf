@@ -94,7 +94,7 @@
          args.value_of("udp_port_pool").unwrap().to_string(),
          args.value_of("udp6_port_pool").unwrap().to_string(),
      );
-
+ 
      let cpu_affinity_manager = Arc::new(Mutex::new(crate::utils::cpu_affinity::CpuAffinityManager::new(args.value_of("affinity").unwrap())?));
      
      let display_json: bool;
@@ -139,10 +139,6 @@
          loop {
              match results_rx.try_recv() {
                  Ok(result) => {
-                     if !display_json {
-                         let output_str = format!("{}\n", result.to_string(display_bit));
-                         output.lock().unwrap().extend_from_slice(output_str.as_bytes());
-                     }
                      let mut tr = test_results.lock().unwrap();
                      match result.kind() {
                          IntervalResultKind::ClientDone | IntervalResultKind::ClientFailed => {
@@ -163,11 +159,14 @@
                              }
                          },
                          _ => {
-                            tr.update_from_json(result.to_json())?;
-                            if display_json {
-                                let output_str = format!("{}\n", result.to_string(display_bit));
-                                output.lock().unwrap().extend_from_slice(output_str.as_bytes());
-                            }
+                             tr.update_from_json(result.to_json())?;
+                             if !display_json {
+                                 let output_str = format!("{}\n", result.to_string(display_bit));
+                                 output.lock().unwrap().extend_from_slice(output_str.as_bytes());
+                             } else {
+                                 // Log interval results but don't write to output buffer
+                                 log::debug!("Interval result: {:?}", result.to_json());
+                             }
                          }
                      }
                  },
@@ -432,7 +431,7 @@
      {
          let tr = test_results.lock().unwrap();
          let output_str = if display_json {
-             tr.to_json_string(
+             let json_output = tr.to_json_string(
                  omit_seconds,
                  upload_config,
                  download_config,
@@ -445,13 +444,19 @@
                      },
                      "reverse": args.is_present("reverse"),
                  })
-             )
+             );
+             log::debug!("Final JSON output: {}", json_output);
+             json_output
          } else {
-             format!("{}\n", tr.to_string(display_bit, omit_seconds))
+             let text_output = format!("{}\n", tr.to_string(display_bit, omit_seconds));
+             log::debug!("Final text output: {}", text_output);
+             text_output
          };
-         output.lock().unwrap().extend_from_slice(output_str.as_bytes());
+         let mut output_guard = output.lock().unwrap();
+         output_guard.clear(); // Clear any previous content
+         output_guard.extend_from_slice(output_str.as_bytes());
      }
-          
+     
      Ok(())
  }
  
