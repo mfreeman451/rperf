@@ -7,15 +7,17 @@ pub mod client;
 pub mod server;
 
 use clap::{App, Arg, ArgMatches};
-use std::error::Error;
 use crate::client::execute;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex}; 
+use anyhow::Result; 
+use std::error::Error;
 
-type BoxResult<T> = Result<T, Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 // Public API for running the client
 pub fn run_client(args: ArgMatches) -> BoxResult<()> {
-    client::execute(args)
+    let output = Arc::new(Mutex::new(Vec::new()));
+    client::execute(args, output)
 }
 
 // Public API for running the server
@@ -26,7 +28,7 @@ pub fn run_server(args: ArgMatches) -> BoxResult<()> {
 pub fn run_client_with_output(
     args: Vec<&str>,
     output: Arc<Mutex<Vec<u8>>>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> { // Changed to Result<(), anyhow::Error>
     let matches = App::new("rperf")
         .about(clap::crate_description!())
         .author("https://github.com/mfreeman451/rperf")
@@ -228,8 +230,7 @@ pub fn run_client_with_output(
         )
         .get_matches_from(args);
 
-    // Modify execute to write to the output buffer instead of printing
-    execute(matches)?;
+    execute(matches, output)?;
     Ok(())
 }
 

@@ -22,7 +22,7 @@ pub mod tcp;
 pub mod udp;
 
 use std::error::Error;
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub const INTERVAL:std::time::Duration = std::time::Duration::from_secs(1);
 

@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::channel;
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
 
 use clap::ArgMatches;
 
@@ -42,7 +42,7 @@ use crate::stream::TestStream;
 use crate::stream::tcp;
 use crate::stream::udp;
 
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 const POLL_TIMEOUT:Duration = Duration::from_millis(500);
 

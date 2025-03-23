@@ -27,7 +27,7 @@ use crate::protocol::results::{IntervalResult, TcpReceiveResult, TcpSendResult, 
 use super::{INTERVAL, TestStream, parse_port_spec};
 
 use std::error::Error;
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub const TEST_HEADER_SIZE:usize = 16;
 
@@ -68,7 +68,7 @@ pub mod receiver {
     use std::io::Read;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
     use std::os::unix::io::AsRawFd;
-    use std::sync::{Mutex};
+    use std::sync::Mutex;
     use std::time::{Duration, Instant};
     
     use mio::net::{TcpListener, TcpStream};
@@ -418,7 +418,7 @@ pub mod sender {
     
     use mio::net::TcpStream;
     
-    use std::thread::{sleep};
+    use std::thread::sleep;
     
     const CONNECT_TIMEOUT:Duration = Duration::from_secs(2);
     const WRITE_TIMEOUT:Duration = Duration::from_millis(50);

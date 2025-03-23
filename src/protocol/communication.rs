@@ -22,10 +22,10 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 use mio::{Events, Ready, Poll, PollOpt, Token};
-use mio::net::{TcpStream};
+use mio::net::TcpStream;
 
 use std::error::Error;
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 /// how long to wait for keepalive events
 // the communications channels typically exchange data every second, so 2s is reasonable to avoid excess noise

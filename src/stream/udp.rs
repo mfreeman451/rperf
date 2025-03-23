@@ -29,7 +29,7 @@ use crate::protocol::results::{IntervalResult, UdpReceiveResult, UdpSendResult, 
 
 use super::{INTERVAL, TestStream, parse_port_spec};
 
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub const TEST_HEADER_SIZE:u16 = 36;
 const UDP_HEADER_SIZE:u16 = 8;
@@ -70,10 +70,10 @@ pub mod receiver {
     use std::convert::TryInto;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
     use std::os::unix::io::AsRawFd;
-    use std::sync::{Mutex};
+    use std::sync::Mutex;
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
     
-    use chrono::{NaiveDateTime};
+    use chrono::NaiveDateTime;
     
     use std::net::UdpSocket;
     
@@ -441,7 +441,7 @@ pub mod sender {
     
     use std::net::UdpSocket;
     
-    use std::thread::{sleep};
+    use std::thread::sleep;
     
     const WRITE_TIMEOUT:Duration = Duration::from_millis(50);
     const BUFFER_FULL_TIMEOUT:Duration = Duration::from_millis(1);
