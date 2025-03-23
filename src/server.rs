@@ -201,19 +201,13 @@ fn handle_client(
                                                     },
                                                 },
                                                 Err(e) => {
-                                                    log::error!("[{}] unable to process stream: {}", peer_addr, e);
-                                                    match c_results_tx.send(Box::new(crate::protocol::results::ServerFailedResult{stream_idx: test.get_idx()})) {
-                                                        Ok(_) => (),
-                                                        Err(e) => log::error!("[{}] unable to report interval-failed-result: {}", &peer_addr, e),
-                                                    }
+                                                    c_results_tx.send(Box::new(crate::protocol::results::ServerFailedResult { stream_idx: test.get_idx() })).ok();
+                                                    log::error!("[{}] stream {} failed: {}", &peer_addr, test.get_idx(), e); 
                                                     break;
                                                 },
                                             },
                                             None => {
-                                                match c_results_tx.send(Box::new(crate::protocol::results::ServerDoneResult{stream_idx: test.get_idx()})) {
-                                                    Ok(_) => (),
-                                                    Err(e) => log::error!("[{}] unable to report interval-done-result: {}", &peer_addr, e),
-                                                }
+                                                c_results_tx.send(Box::new(crate::protocol::results::ServerDoneResult { stream_idx: test.get_idx() })).ok();
                                                 break;
                                             },
                                         }
@@ -229,6 +223,11 @@ fn handle_client(
                     },
                     "end" => { //the client has indicated that testing is done; stop cleanly
                         log::info!("[{}] end of testing signaled", &peer_addr);
+                        for ps in parallel_streams.iter_mut() {
+                            let mut stream = ps.lock().unwrap();
+                            stream.stop();
+                        }
+                        send(stream, &serde_json::json!({"kind": "done", "stream_idx": 0})).unwrap_or_default();
                         break;
                     },
                     _ => {

@@ -230,6 +230,12 @@ pub fn run_client_with_output(
         )
         .get_matches_from(args);
 
+    // Important: Clear the output buffer before running
+    {
+        let mut output_guard = output.lock().unwrap();
+        output_guard.clear();
+    }
+
     execute(matches, output)?;
     Ok(())
 }

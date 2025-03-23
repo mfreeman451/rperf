@@ -210,6 +210,16 @@ pub mod receiver {
                 }
             }
             log::debug!("bound UDP receive socket for stream {}: {}", stream_idx, socket.local_addr()?);
+
+            /*
+            if *receive_buffer == 0 {
+                log::debug!("setting default receive-buffer to 212992...");
+                super::setsockopt(socket.as_raw_fd(), super::RcvBuf, &212992)?;
+            } else if *receive_buffer != 0 {
+                log::debug!("setting receive-buffer to {}...", receive_buffer);
+                super::setsockopt(socket.as_raw_fd(), super::RcvBuf, receive_buffer)?;
+            }
+            */
             
             Ok(UdpReceiver{
                 active: true,
@@ -351,8 +361,9 @@ pub mod receiver {
                             log::trace!("received {} bytes in UDP packet {} from {}", packet_size, self.stream_idx, peer_addr);
                             if packet_size == 16 { //possible end-of-test message
                                 if &buf[0..16] == self.test_definition.test_id { //test's over
+                                    log::debug!("Received end-of-test signal for UDP stream {}", self.stream_idx);
                                     self.stop();
-                                    break;
+                                    return None;
                                 }
                             }
                             if packet_size < super::TEST_HEADER_SIZE as usize {
