@@ -19,7 +19,7 @@
  */
 
 use std::error::Error;
-type BoxResult<T> = Result<T,Box<dyn Error>>;
+type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 /// prepares a message used to tell the server to begin operations
 pub fn prepare_begin() -> serde_json::Value {
