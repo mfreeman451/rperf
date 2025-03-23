@@ -163,7 +163,13 @@
                              }
                          },
                          _ => {
-                             tr.update_from_json(result.to_json())?;
+                            let json = result.to_json();
+                            tr.update_from_json(json.clone())?;
+                            if display_json {
+                                // Always write JSON to output buffer
+                                let json_str = serde_json::to_string(&json)? + "\n";
+                                output.lock().unwrap().extend_from_slice(json_str.as_bytes());
+                            }
                          }
                      }
                  },
