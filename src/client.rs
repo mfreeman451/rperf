@@ -442,7 +442,7 @@
     {
         let tr = test_results.lock().unwrap();
         let output_str = if display_json {
-            let json_output = tr.to_json_string(
+            tr.to_json_string(
                 omit_seconds,
                 upload_config,
                 download_config,
@@ -455,19 +455,15 @@
                     },
                     "reverse": args.is_present("reverse"),
                 })
-            );
-            log::debug!("Final JSON output: {}", json_output);
-            json_output
+            )
         } else {
-            let text_output = format!("{}\n", tr.to_string(display_bit, omit_seconds));
-            log::debug!("Final text output: {}", text_output);
-            text_output
+            format!("{}\n", tr.to_string(display_bit, omit_seconds))
         };
         let mut output_guard = output.lock().unwrap();
-        output_guard.clear(); // Clear any previous content
+        output_guard.clear();
         output_guard.extend_from_slice(output_str.as_bytes());
     }
-    
+        
     let tr = test_results.lock().unwrap();
     if !tr.is_success() {
         log::warn!("Test did not complete successfully; some streams may have failed");
