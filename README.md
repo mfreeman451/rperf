@@ -1,5 +1,7 @@
 # rperf
 
+[![Crates.io](https://img.shields.io/crates/v/rperf)](https://crates.io/crates/rperf)
+
 _rperf_ is a Rust-based [_iperf_](https://github.com/esnet/iperf) alternative
 developed by [3D-P](https://3d-p.com/), aiming to avoid some reliability and
 consistency issues found in _iperf3_, while simultaneously providing richer

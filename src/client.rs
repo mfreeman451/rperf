@@ -278,8 +278,8 @@
             let c_ps = Arc::clone(parallel_stream);
             let c_results_tx = results_tx.clone();
             let c_cam = cpu_affinity_manager.clone();
-            let duration = upload_config["duration"].as_f64().unwrap() as f32;
-            let stream_idx_u8: u8 = stream_idx.try_into().expect("stream_idx exceeds u8 range");
+            // let duration = upload_config["duration"].as_f64().unwrap() as f32;
+            // let stream_idx_u8: u8 = stream_idx.try_into().expect("stream_idx exceeds u8 range");
             let handle = thread::spawn(move || {
                 c_cam.lock().unwrap().set_affinity();
                 let mut test = c_ps.lock().unwrap();
