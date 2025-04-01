@@ -48,7 +48,7 @@ const POLL_TIMEOUT: Duration = Duration::from_millis(500);
 
 fn handle_client(
     stream: &mut TcpStream,
-    run_state: &ServerRunState, // Added parameter
+    run_state: &ServerRunState, 
     cpu_affinity_manager: Arc<Mutex<crate::utils::cpu_affinity::CpuAffinityManager>>,
     tcp_port_pool: Arc<Mutex<tcp::receiver::TcpPortPool>>,
     udp_port_pool: Arc<Mutex<udp::receiver::UdpPortPool>>,
@@ -250,7 +250,7 @@ fn handle_client(
 /// A panic-tolerant means of indicating that a client has been disconnected
 struct ClientThreadMonitor {
     client_address: String,
-    run_state: ServerRunState, // Added field
+    run_state: ServerRunState, 
 }
 impl Drop for ClientThreadMonitor {
     fn drop(&mut self) {
