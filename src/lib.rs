@@ -7,9 +7,10 @@ pub mod client;
 pub mod server;
 
 use clap::{App, Arg, ArgMatches};
-use crate::client::execute;
-use std::sync::{Arc, Mutex}; 
-use anyhow::Result; 
+use crate::client::{execute, state::ClientRunState};
+use crate::server::{state::ServerRunState};
+use std::sync::{Arc, Mutex};
+use anyhow::Result;
 use std::error::Error;
 
 type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -17,18 +18,20 @@ type BoxResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 // Public API for running the client
 pub fn run_client(args: ArgMatches) -> BoxResult<()> {
     let output = Arc::new(Mutex::new(Vec::new()));
-    client::execute(args, output)
+    let run_state = ClientRunState::new();
+    client::execute(args, output, run_state)
 }
 
 // Public API for running the server
 pub fn run_server(args: ArgMatches) -> BoxResult<()> {
-    server::serve(args)
+    let run_state = ServerRunState::new(); // Create a new ServerRunState
+    server::serve(args, run_state) // Pass run_state
 }
 
 pub fn run_client_with_output(
     args: Vec<&str>,
     output: Arc<Mutex<Vec<u8>>>,
-) -> BoxResult<()> { 
+) -> BoxResult<()> {
     let matches = App::new("rperf")
         .about(clap::crate_description!())
         .author("https://github.com/mfreeman451/rperf")
@@ -230,13 +233,14 @@ pub fn run_client_with_output(
         )
         .get_matches_from(args);
 
-    // Important: Clear the output buffer before running
     {
         let mut output_guard = output.lock().unwrap();
         output_guard.clear();
     }
 
-    execute(matches, output)?;
+    let run_state = ClientRunState::new();
+    execute(matches, output, run_state)?;
+    
     Ok(())
 }
 
