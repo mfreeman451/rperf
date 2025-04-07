@@ -209,16 +209,12 @@ pub fn execute(
         Ok(())
     };
 
+    // Send configuration
     if args.is_present("reverse") {
         log::debug!("running in reverse-mode: server will be uploading data");
-
         let mut stream_ports = Vec::with_capacity(stream_count);
-
         if is_udp {
-            log::info!(
-                "preparing for reverse-UDP test with {} streams...",
-                stream_count
-            );
+            log::info!("preparing for reverse-UDP test with {} streams...", stream_count);
             let test_definition = udp::UdpTestDefinition::new(&download_config)?;
             for stream_idx in 0..stream_count {
                 log::debug!("preparing UDP-receiver for stream {}...", stream_idx);
@@ -233,10 +229,7 @@ pub fn execute(
                 parallel_streams.push(Arc::new(Mutex::new(test)));
             }
         } else {
-            log::info!(
-                "preparing for reverse-TCP test with {} streams...",
-                stream_count
-            );
+            log::info!("preparing for reverse-TCP test with {} streams...", stream_count);
             let test_definition = tcp::TcpTestDefinition::new(&download_config)?;
             for stream_idx in 0..stream_count {
                 log::debug!("preparing TCP-receiver for stream {}...", stream_idx);
@@ -251,7 +244,6 @@ pub fn execute(
                 parallel_streams.push(Arc::new(Mutex::new(test)));
             }
         }
-
         upload_config["stream_ports"] = serde_json::json!(stream_ports);
         send(&mut stream, &upload_config)?;
     } else {
@@ -259,8 +251,8 @@ pub fn execute(
         send(&mut stream, &download_config)?;
     }
 
+    // Handle initial connection response
     let connection_payload = communication::receive(&mut stream, &run_state, &mut results_handler)?;
-
     match connection_payload.get("kind") {
         Some(kind) => match kind.as_str().unwrap_or_default() {
             "connect" => {
@@ -316,51 +308,55 @@ pub fn execute(
             }
             "connect-ready" => {}
             _ => {
-                log::error!(
-                    "invalid data from {}: {}",
+                log::warn!(
+                    "unexpected connection data from {}: {}",
                     stream.peer_addr()?,
                     serde_json::to_string(&connection_payload)?
                 );
-                run_state.request_shutdown();
+                // Don't terminate on unexpected data
             }
         },
         None => {
-            log::error!(
-                "invalid data from {}: {}",
+            log::warn!(
+                "malformed connection data from {}: {}",
                 stream.peer_addr()?,
                 serde_json::to_string(&connection_payload)?
             );
-            run_state.request_shutdown();
+            // Don't terminate on unexpected data
         }
     }
 
     if run_state.is_alive() {
-        // Now works because of RunState trait
         log::info!("informing server that testing can begin...");
         send(&mut stream, &prepare_begin())?;
 
+        // Wait for server "ready" signal before starting streams
         log::info!("waiting for server ready signal...");
-        loop {
-            // Need to clone run_state or pass appropriately if communication::receive needs it mutable
-            // Assuming communication::receive can take an immutable reference for this check
+        while run_state.is_alive() {
             let payload = communication::receive(&mut stream, &run_state, &mut results_handler)?;
-            if payload.get("kind").and_then(|k| k.as_str()) == Some("ready") {
-                log::info!("server ready signal received");
-                break; // Exit the wait loop
-            } else {
-                // Handle other messages if necessary, or log a warning
-                log::warn!(
-                    "received unexpected message while waiting for ready: {:?}",
-                    payload
-                );
-                // Add a small delay or check run_state more explicitly if needed to prevent busy-looping on unexpected messages
-                if !run_state.is_alive() {
-                    return Err(anyhow::anyhow!(
-                        "Shutdown requested while waiting for server ready signal"
-                    )
-                    .into());
+            match payload.get("kind").and_then(|k| k.as_str()) {
+                Some("ready") => {
+                    log::info!("server ready signal received");
+                    break;
+                }
+                Some(kind) => {
+                    log::warn!(
+                        "received unexpected message while waiting for ready: {}",
+                        kind
+                    );
+                    // Continue waiting unless shutdown is requested
+                }
+                None => {
+                    log::warn!(
+                        "received malformed message while waiting for ready: {:?}",
+                        payload
+                    );
                 }
             }
+        }
+
+        if !run_state.is_alive() {
+            return Err(anyhow::anyhow!("Shutdown requested while waiting for server ready signal").into());
         }
 
         log::debug!("spawning stream-threads");
@@ -424,39 +420,37 @@ pub fn execute(
                             tr.update_from_json(payload)?;
                         }
                         "done" | "failed" => match payload.get("stream_idx") {
-                            Some(stream_idx) => {
-                                match stream_idx.as_i64() {
-                                    Some(idx64) => {
-                                        let mut tr = test_results.lock().unwrap();
-                                        match kind.as_str().unwrap() {
-                                            "done" => log::info!(
-                                                "server reported completion of stream {}",
+                            Some(stream_idx) => match stream_idx.as_i64() {
+                                Some(idx64) => {
+                                    let mut tr = test_results.lock().unwrap();
+                                    match kind.as_str().unwrap() {
+                                        "done" => log::info!(
+                                            "server reported completion of stream {}",
+                                            idx64
+                                        ),
+                                        "failed" => {
+                                            log::warn!(
+                                                "server reported failure with stream {}",
                                                 idx64
-                                            ),
-                                            "failed" => {
-                                                log::warn!(
-                                                    "server reported failure with stream {}",
-                                                    idx64
-                                                );
-                                                tr.mark_stream_done(&(idx64 as u8), false);
-                                            }
-                                            _ => (),
+                                            );
+                                            tr.mark_stream_done(&(idx64 as u8), false);
                                         }
-                                        tr.mark_stream_done_server(&(idx64 as u8));
-                                        if tr.count_in_progress_streams() == 0
-                                            && tr.count_in_progress_streams_server() == 0
-                                        {
-                                            complete.store(true, Ordering::Relaxed);
-                                            run_state.request_shutdown();
-                                            break;
-                                        }
+                                        _ => (),
                                     }
-                                    None => {
-                                        log::error!("completion from server did not include a valid stream_idx");
+                                    tr.mark_stream_done_server(&(idx64 as u8));
+                                    if tr.count_in_progress_streams() == 0
+                                        && tr.count_in_progress_streams_server() == 0
+                                    {
+                                        complete.store(true, Ordering::Relaxed);
+                                        run_state.request_shutdown();
                                         break;
                                     }
                                 }
-                            }
+                                None => {
+                                    log::error!("completion from server did not include a valid stream_idx");
+                                    break;
+                                }
+                            },
                             None => {
                                 log::error!("completion from server did not include stream_idx");
                                 break;
