@@ -37,7 +37,7 @@ use crate::protocol::messaging::{
 use crate::protocol::results::{
     IntervalResult, IntervalResultKind, TcpTestResults, TestResults, UdpTestResults,
 };
-use crate::protocol::state::RunState; // Add this import
+use crate::protocol::state::RunState;
 use crate::stream::tcp;
 use crate::stream::udp;
 use crate::stream::TestStream;
