@@ -244,7 +244,7 @@ pub fn execute(
                 parallel_streams.push(Arc::new(Mutex::new(test)));
             }
         }
-        upload_config["stream_ports"] = serde_json::json!(stream_ports);
+        upload_config["stream.bundle"] = serde_json::json!(stream_ports);
         send(&mut stream, &upload_config)?;
     } else {
         log::debug!("running in forward-mode: server will be receiving data");
@@ -260,7 +260,7 @@ pub fn execute(
                     log::info!("preparing for UDP test with {} streams...", stream_count);
                     let test_definition = udp::UdpTestDefinition::new(&upload_config)?;
                     for (stream_idx, port) in connection_payload
-                        .get("stream_ports")
+                        .get("stream.bundle")
                         .unwrap()
                         .as_array()
                         .unwrap()
@@ -284,7 +284,7 @@ pub fn execute(
                     log::info!("preparing for TCP test with {} streams...", stream_count);
                     let test_definition = tcp::TcpTestDefinition::new(&upload_config)?;
                     for (stream_idx, port) in connection_payload
-                        .get("stream_ports")
+                        .get("stream.bundle")
                         .unwrap()
                         .as_array()
                         .unwrap()
@@ -337,7 +337,7 @@ pub fn execute(
             match payload.get("kind").and_then(|k| k.as_str()) {
                 Some("ready") => {
                     log::info!("server ready signal received");
-                    break;
+                    break; // Exit loop to proceed with test streams
                 }
                 Some(kind) => {
                     log::warn!(
@@ -401,6 +401,7 @@ pub fn execute(
             parallel_streams_joinhandles.push(handle);
         }
 
+        // Main test loop with updated handling for unexpected "ready" messages
         while run_state.is_alive() {
             match communication::receive(&mut stream, &run_state, &mut results_handler) {
                 Ok(payload) => match payload.get("kind") {
@@ -456,6 +457,10 @@ pub fn execute(
                                 break;
                             }
                         },
+                        "ready" => {
+                            log::debug!("Received unexpected 'ready' during test; ignoring...");
+                            continue; // Gracefully ignore extra "ready" messages
+                        }
                         _ => {
                             log::error!(
                                 "invalid data from {}: {}",
@@ -522,7 +527,7 @@ pub fn execute(
         upload_config_map.remove("role");
         let cc_streams = upload_config_map.remove("streams");
         upload_config_map.remove("test_id");
-        upload_config_map.remove("stream_ports");
+        upload_config_map.remove("stream.bundle");
         if upload_config_map["send_buffer"].as_i64().unwrap() == 0 {
             upload_config_map.remove("send_buffer");
         }
