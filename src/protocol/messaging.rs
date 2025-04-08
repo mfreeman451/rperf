@@ -51,8 +51,11 @@ pub fn prepare_end() -> serde_json::Value {
     })
 }
 
-
-
+pub fn prepare_ready_ack() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "ready_ack",
+    })
+}
 
 /// prepares a message used to describe the upload role of a TCP test
 fn prepare_configuration_tcp_upload(test_id:&[u8; 16], streams:u8, bandwidth:u64, seconds:f32, length:usize, send_interval:f32, send_buffer:u32, no_delay:bool) -> serde_json::Value {
