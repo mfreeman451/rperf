@@ -197,7 +197,11 @@ fn handle_client(
                                 });
                                 parallel_streams_joinhandles.push(handle);
                             }
+                            
                             started = true;
+
+                            log::info!("[{}] receiver threads spawned, sending ready signal", &peer_addr);
+                            send(stream, &serde_json::json!({"kind": "ready"}))?;
                         } else {
                             log::error!("[{}] duplicate begin-signal", &peer_addr);
                             break;
