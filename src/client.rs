@@ -252,77 +252,88 @@ pub fn execute(
     }
 
     // Handle initial connection response
-    let connection_payload = communication::receive(&mut stream, &run_state, &mut results_handler)?;
-    match connection_payload.get("kind") {
-        Some(kind) => match kind.as_str().unwrap_or_default() {
-            "connect" => {
-                if is_udp {
-                    log::info!("preparing for UDP test with {} streams...", stream_count);
-                    let test_definition = udp::UdpTestDefinition::new(&upload_config)?;
-                    for (stream_idx, port) in connection_payload
-                        .get("stream.bundle")
-                        .unwrap()
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .enumerate()
-                    {
-                        log::debug!("preparing UDP-sender for stream {}...", stream_idx);
-                        let test = udp::sender::UdpSender::new(
-                            test_definition.clone(),
-                            &(stream_idx as u8),
-                            &0,
-                            &server_addr.ip(),
-                            &(port.as_i64().unwrap() as u16),
-                            &(upload_config["duration"].as_f64().unwrap() as f32),
-                            &(upload_config["send_interval"].as_f64().unwrap() as f32),
-                            &(upload_config["send_buffer"].as_i64().unwrap() as usize),
-                        )?;
-                        parallel_streams.push(Arc::new(Mutex::new(test)));
+    let connection_payload_result = communication::receive(&mut stream, &run_state, &mut results_handler);
+    
+    // Handle initial connection response
+    match connection_payload_result {
+        Ok(connection_payload) => {
+            match connection_payload.get("kind") {
+                Some(kind) => match kind.as_str().unwrap_or_default() {
+                    "connect" => {
+                        let stream_bundle = match connection_payload.get("stream_bundle") {
+                            Some(bundle) => bundle,
+                            None => {
+                                log::error!("Server response missing 'stream_bundle' field: {:?}", connection_payload);
+                                return Err(anyhow::anyhow!("Server response missing 'stream_bundle' field").into());
+                            }
+                        };
+                        let ports = match stream_bundle.as_array() {
+                            Some(arr) => arr,
+                            None => {
+                                log::error!("'stream_bundle' is not an array: {:?}", stream_bundle);
+                                return Err(anyhow::anyhow!("'stream_bundle' is not an array").into());
+                            }
+                        };
+
+                        if is_udp {
+                            log::info!("preparing for UDP test with {} streams...", stream_count);
+                            let test_definition = udp::UdpTestDefinition::new(&upload_config)?;
+                            for (stream_idx, port) in ports.iter().enumerate() {
+                                log::debug!("preparing UDP-sender for stream {}...", stream_idx);
+                                let test = udp::sender::UdpSender::new(
+                                    test_definition.clone(),
+                                    &(stream_idx as u8),
+                                    &0,
+                                    &server_addr.ip(),
+                                    &(port.as_i64().unwrap() as u16),
+                                    &(upload_config["duration"].as_f64().unwrap() as f32),
+                                    &(upload_config["send_interval"].as_f64().unwrap() as f32),
+                                    &(upload_config["send_buffer"].as_i64().unwrap() as usize),
+                                )?;
+                                parallel_streams.push(Arc::new(Mutex::new(test)));
+                            }
+                        } else {
+                            log::info!("preparing for TCP test with {} streams...", stream_count);
+                            let test_definition = tcp::TcpTestDefinition::new(&upload_config)?;
+                            for (stream_idx, port) in ports.iter().enumerate() {
+                                log::debug!("preparing TCP-sender for stream {}...", stream_idx);
+                                let test = tcp::sender::TcpSender::new(
+                                    test_definition.clone(),
+                                    &(stream_idx as u8),
+                                    &server_addr.ip(),
+                                    &(port.as_i64().unwrap() as u16),
+                                    &(upload_config["duration"].as_f64().unwrap() as f32),
+                                    &(upload_config["send_interval"].as_f64().unwrap() as f32),
+                                    &(upload_config["send_buffer"].as_i64().unwrap() as usize),
+                                    &(upload_config["no_delay"].as_bool().unwrap()),
+                                )?;
+                                parallel_streams.push(Arc::new(Mutex::new(test)));
+                            }
+                        }
                     }
-                } else {
-                    log::info!("preparing for TCP test with {} streams...", stream_count);
-                    let test_definition = tcp::TcpTestDefinition::new(&upload_config)?;
-                    for (stream_idx, port) in connection_payload
-                        .get("stream.bundle")
-                        .unwrap()
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .enumerate()
-                    {
-                        log::debug!("preparing TCP-sender for stream {}...", stream_idx);
-                        let test = tcp::sender::TcpSender::new(
-                            test_definition.clone(),
-                            &(stream_idx as u8),
-                            &server_addr.ip(),
-                            &(port.as_i64().unwrap() as u16),
-                            &(upload_config["duration"].as_f64().unwrap() as f32),
-                            &(upload_config["send_interval"].as_f64().unwrap() as f32),
-                            &(upload_config["send_buffer"].as_i64().unwrap() as usize),
-                            &(upload_config["no_delay"].as_bool().unwrap()),
-                        )?;
-                        parallel_streams.push(Arc::new(Mutex::new(test)));
+                    "connect-ready" => {}
+                    _ => {
+                        log::warn!(
+                        "unexpected connection data from {}: {}",
+                        stream.peer_addr()?,
+                        serde_json::to_string(&connection_payload)?
+                    );
+                        // Continue execution instead of terminating
                     }
-                }
-            }
-            "connect-ready" => {}
-            _ => {
-                log::warn!(
-                    "unexpected connection data from {}: {}",
+                },
+                None => {
+                    log::warn!(
+                    "malformed connection data from {}: {}",
                     stream.peer_addr()?,
                     serde_json::to_string(&connection_payload)?
                 );
-                // Don't terminate on unexpected data
+                    // Continue execution instead of terminating
+                }
             }
-        },
-        None => {
-            log::warn!(
-                "malformed connection data from {}: {}",
-                stream.peer_addr()?,
-                serde_json::to_string(&connection_payload)?
-            );
-            // Don't terminate on unexpected data
+        }
+        Err(e) => {
+            log::error!("Failed to receive connection payload from server: {}", e);
+            return Err(anyhow::anyhow!("Failed to receive connection payload from server: {}", e).into());
         }
     }
 
