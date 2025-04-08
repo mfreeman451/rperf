@@ -209,7 +209,7 @@ pub fn execute(
         Ok(())
     };
 
-    // Send configuration
+    // Send configuration based on mode
     if args.is_present("reverse") {
         log::debug!("running in reverse-mode: server will be uploading data");
         let mut stream_ports = Vec::with_capacity(stream_count);
@@ -251,124 +251,77 @@ pub fn execute(
         send(&mut stream, &download_config)?;
     }
 
-    // Handle initial connection response
-    let connection_payload_result = communication::receive(&mut stream, &run_state, &mut results_handler);
+    // Receive server's response and prepare streams
+    let connection_payload = communication::receive(&mut stream, &run_state, &mut results_handler)?;
+    match connection_payload.get("kind") {
+        Some(kind) => match kind.as_str().unwrap_or_default() {
+            "connect" => {
+                let stream_ports = connection_payload
+                    .get("stream_ports")
+                    .ok_or_else(|| anyhow::anyhow!("Server response missing 'stream_ports' field"))?
+                    .as_array()
+                    .ok_or_else(|| anyhow::anyhow!("'stream_ports' is not an array"))?;
 
-    // Handle initial connection response
-    match connection_payload_result {
-        Ok(connection_payload) => {
-            match connection_payload.get("kind") {
-                Some(kind) => match kind.as_str().unwrap_or_default() {
-                    "connect" => {
-                        let stream_ports = match connection_payload.get("stream_ports") { // Changed from "stream_bundle"
-                            Some(ports) => ports,
-                            None => {
-                                log::error!("Server response missing 'stream_ports' field: {:?}", connection_payload);
-                                return Err(anyhow::anyhow!("Server response missing 'stream_ports' field").into());
-                            }
-                        };
-                        let ports = match stream_ports.as_array() {
-                            Some(arr) => arr,
-                            None => {
-                                log::error!("'stream_ports' is not an array: {:?}", stream_ports);
-                                return Err(anyhow::anyhow!("'stream_ports' is not an array").into());
-                            }
-                        };
-
-                        if is_udp {
-                            log::info!("preparing for UDP test with {} streams...", stream_count);
-                            let test_definition = udp::UdpTestDefinition::new(&upload_config)?;
-                            for (stream_idx, port) in ports.iter().enumerate() {
-                                log::debug!("preparing UDP-sender for stream {}...", stream_idx);
-                                let test = udp::sender::UdpSender::new(
-                                    test_definition.clone(),
-                                    &(stream_idx as u8),
-                                    &0,
-                                    &server_addr.ip(),
-                                    &(port.as_i64().unwrap() as u16),
-                                    &(upload_config["duration"].as_f64().unwrap() as f32),
-                                    &(upload_config["send_interval"].as_f64().unwrap() as f32),
-                                    &(upload_config["send_buffer"].as_i64().unwrap() as usize),
-                                )?;
-                                parallel_streams.push(Arc::new(Mutex::new(test)));
-                            }
-                        } else {
-                            log::info!("preparing for TCP test with {} streams...", stream_count);
-                            let test_definition = tcp::TcpTestDefinition::new(&upload_config)?;
-                            for (stream_idx, port) in ports.iter().enumerate() {
-                                log::debug!("preparing TCP-sender for stream {}...", stream_idx);
-                                let test = tcp::sender::TcpSender::new(
-                                    test_definition.clone(),
-                                    &(stream_idx as u8),
-                                    &server_addr.ip(),
-                                    &(port.as_i64().unwrap() as u16),
-                                    &(upload_config["duration"].as_f64().unwrap() as f32),
-                                    &(upload_config["send_interval"].as_f64().unwrap() as f32),
-                                    &(upload_config["send_buffer"].as_i64().unwrap() as usize),
-                                    &(upload_config["no_delay"].as_bool().unwrap()),
-                                )?;
-                                parallel_streams.push(Arc::new(Mutex::new(test)));
-                            }
-                        }
+                if is_udp {
+                    log::info!("preparing for UDP test with {} streams...", stream_count);
+                    let test_definition = udp::UdpTestDefinition::new(&upload_config)?;
+                    for (stream_idx, port) in stream_ports.iter().enumerate() {
+                        log::debug!("preparing UDP-sender for stream {}...", stream_idx);
+                        let test = udp::sender::UdpSender::new(
+                            test_definition.clone(),
+                            &(stream_idx as u8),
+                            &0,
+                            &server_addr.ip(),
+                            &(port.as_i64().unwrap() as u16),
+                            &(upload_config["duration"].as_f64().unwrap() as f32),
+                            &(upload_config["send_interval"].as_f64().unwrap() as f32),
+                            &(upload_config["send_buffer"].as_i64().unwrap() as usize),
+                        )?;
+                        parallel_streams.push(Arc::new(Mutex::new(test)));
                     }
-                    "connect-ready" => {}
-                    _ => {
-                        log::warn!(
-                        "unexpected connection data from {}: {}",
-                        stream.peer_addr()?,
-                        serde_json::to_string(&connection_payload)?
-                    );
-                        // Continue execution instead of terminating
+                } else {
+                    log::info!("preparing for TCP test with {} streams...", stream_count);
+                    let test_definition = tcp::TcpTestDefinition::new(&upload_config)?;
+                    for (stream_idx, port) in stream_ports.iter().enumerate() {
+                        log::debug!("preparing TCP-sender for stream {}...", stream_idx);
+                        let test = tcp::sender::TcpSender::new(
+                            test_definition.clone(),
+                            &(stream_idx as u8),
+                            &server_addr.ip(),
+                            &(port.as_i64().unwrap() as u16),
+                            &(upload_config["duration"].as_f64().unwrap() as f32),
+                            &(upload_config["send_interval"].as_f64().unwrap() as f32),
+                            &(upload_config["send_buffer"].as_i64().unwrap() as usize),
+                            &(upload_config["no_delay"].as_bool().unwrap()),
+                        )?;
+                        parallel_streams.push(Arc::new(Mutex::new(test)));
                     }
-                },
-                None => {
-                    log::warn!(
-                    "malformed connection data from {}: {}",
+                }
+            }
+            "connect-ready" => {
+                // Reverse mode; no further client-side prep needed
+            }
+            _ => {
+                log::warn!(
+                    "unexpected connection data from {}: {}",
                     stream.peer_addr()?,
                     serde_json::to_string(&connection_payload)?
                 );
-                    // Continue execution instead of terminating
-                }
             }
-        }
-        Err(e) => {
-            log::error!("Failed to receive connection payload from server: {}", e);
-            return Err(anyhow::anyhow!("Failed to receive connection payload from server: {}", e).into());
+        },
+        None => {
+            log::warn!(
+                "malformed connection data from {}: {}",
+                stream.peer_addr()?,
+                serde_json::to_string(&connection_payload)?
+            );
         }
     }
 
+    // Start test immediately after receiving "connect"
     if run_state.is_alive() {
         log::info!("informing server that testing can begin...");
         send(&mut stream, &prepare_begin())?;
-
-        // Wait for server "ready" signal before starting streams
-        log::info!("waiting for server ready signal...");
-        while run_state.is_alive() {
-            let payload = communication::receive(&mut stream, &run_state, &mut results_handler)?;
-            match payload.get("kind").and_then(|k| k.as_str()) {
-                Some("ready") => {
-                    log::info!("server ready signal received");
-                    break; // Exit loop to proceed with test streams
-                }
-                Some(kind) => {
-                    log::warn!(
-                        "received unexpected message while waiting for ready: {}",
-                        kind
-                    );
-                    // Continue waiting unless shutdown is requested
-                }
-                None => {
-                    log::warn!(
-                        "received malformed message while waiting for ready: {:?}",
-                        payload
-                    );
-                }
-            }
-        }
-
-        if !run_state.is_alive() {
-            return Err(anyhow::anyhow!("Shutdown requested while waiting for server ready signal").into());
-        }
 
         log::debug!("spawning stream-threads");
         for (stream_idx, parallel_stream) in parallel_streams.iter_mut().enumerate() {
@@ -412,7 +365,7 @@ pub fn execute(
             parallel_streams_joinhandles.push(handle);
         }
 
-        // Main test loop with updated handling for unexpected "ready" messages
+        // Main test loop
         while run_state.is_alive() {
             match communication::receive(&mut stream, &run_state, &mut results_handler) {
                 Ok(payload) => match payload.get("kind") {
@@ -459,7 +412,9 @@ pub fn execute(
                                     }
                                 }
                                 None => {
-                                    log::error!("completion from server did not include a valid stream_idx");
+                                    log::error!(
+                                        "completion from server did not include a valid stream_idx"
+                                    );
                                     break;
                                 }
                             },
@@ -468,10 +423,6 @@ pub fn execute(
                                 break;
                             }
                         },
-                        "ready" => {
-                            log::debug!("Received unexpected 'ready' during test; ignoring...");
-                            continue; // Gracefully ignore extra "ready" messages
-                        }
                         _ => {
                             log::error!(
                                 "invalid data from {}: {}",
