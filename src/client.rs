@@ -253,25 +253,25 @@ pub fn execute(
 
     // Handle initial connection response
     let connection_payload_result = communication::receive(&mut stream, &run_state, &mut results_handler);
-    
+
     // Handle initial connection response
     match connection_payload_result {
         Ok(connection_payload) => {
             match connection_payload.get("kind") {
                 Some(kind) => match kind.as_str().unwrap_or_default() {
                     "connect" => {
-                        let stream_bundle = match connection_payload.get("stream_bundle") {
-                            Some(bundle) => bundle,
+                        let stream_ports = match connection_payload.get("stream_ports") { // Changed from "stream_bundle"
+                            Some(ports) => ports,
                             None => {
-                                log::error!("Server response missing 'stream_bundle' field: {:?}", connection_payload);
-                                return Err(anyhow::anyhow!("Server response missing 'stream_bundle' field").into());
+                                log::error!("Server response missing 'stream_ports' field: {:?}", connection_payload);
+                                return Err(anyhow::anyhow!("Server response missing 'stream_ports' field").into());
                             }
                         };
-                        let ports = match stream_bundle.as_array() {
+                        let ports = match stream_ports.as_array() {
                             Some(arr) => arr,
                             None => {
-                                log::error!("'stream_bundle' is not an array: {:?}", stream_bundle);
-                                return Err(anyhow::anyhow!("'stream_bundle' is not an array").into());
+                                log::error!("'stream_ports' is not an array: {:?}", stream_ports);
+                                return Err(anyhow::anyhow!("'stream_ports' is not an array").into());
                             }
                         };
 
