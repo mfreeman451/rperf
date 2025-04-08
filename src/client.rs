@@ -244,7 +244,7 @@ pub fn execute(
                 parallel_streams.push(Arc::new(Mutex::new(test)));
             }
         }
-        upload_config["stream.bundle"] = serde_json::json!(stream_ports);
+        upload_config["stream_ports"] = serde_json::json!(stream_ports);
         send(&mut stream, &upload_config)?;
     } else {
         log::debug!("running in forward-mode: server will be receiving data");
@@ -538,7 +538,7 @@ pub fn execute(
         upload_config_map.remove("role");
         let cc_streams = upload_config_map.remove("streams");
         upload_config_map.remove("test_id");
-        upload_config_map.remove("stream.bundle");
+        upload_config_map.remove("stream_ports");
         if upload_config_map["send_buffer"].as_i64().unwrap() == 0 {
             upload_config_map.remove("send_buffer");
         }
